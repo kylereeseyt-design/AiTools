@@ -1106,24 +1106,22 @@
           correctCountEl.textContent = answeredCount + " / " + correctCount;
           feedbackEl.textContent = "√ 回答正确！";
           feedbackEl.className = "feedback correct";
+          playBeep(true, false); // 播放普通正确音效
           
           // 检查是否连续答对5题
-          if (consecutiveCorrect >= 5) {
-            shouldShowCelebration = true;
-            consecutiveCorrect = 0; // 重置计数，避免重复触发
-            playBeep(true, true); // 播放 great.mp3
-            if (!gameOver) {
-                renderQuestion();
-            }
-            // showBadgeCelebration(() => {
-            //   // 徽章展示完成后的回调
-            //   if (!gameOver) {
-            //     renderQuestion();
-            //   }
-            // });
-          } else {
-            playBeep(true, false); // 播放普通正确音效
-          }
+          // if (consecutiveCorrect >= 5) {
+          //   shouldShowCelebration = true;
+          //   consecutiveCorrect = 0; // 重置计数，避免重复触发
+          //   playBeep(true, true); // 播放 great.mp3
+          //   showBadgeCelebration(() => {
+          //     // 徽章展示完成后的回调
+          //     if (!gameOver) {
+          //       renderQuestion();
+          //     }
+          //   });
+          // } else {
+          //   playBeep(true, false); // 播放普通正确音效
+          // }
         } else {
           consecutiveCorrect = 0; // 答错时重置连续答对计数
           feedbackEl.textContent = "✗ 回答错误，正确答案是 " + q.ans;
