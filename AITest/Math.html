@@ -808,13 +808,91 @@
       let audioContext = null;
       let htmlAudioCorrect = null;
       let htmlAudioWrong = null;
-
+      let htmlAudioGreat = null;
+      let audioPreloaded = false; // 音频预加载状态
+      
       function initHtmlAudio() {
         if (!htmlAudioCorrect) {
           htmlAudioCorrect = document.getElementById("sound-correct") || null;
         }
         if (!htmlAudioWrong) {
           htmlAudioWrong = document.getElementById("sound-wrong") || null;
+        }
+        if (!htmlAudioGreat) {
+          htmlAudioGreat = document.getElementById("sound-great") || null;
+        }
+      }
+
+      // 预加载音频文件，确保浏览器缓存
+      function preloadAudio() {
+        if (audioPreloaded) return;
+        
+        initHtmlAudio();
+        const audioFiles = [
+          { element: htmlAudioCorrect, name: 'correct' },
+          { element: htmlAudioWrong, name: 'wrong' },
+          { element: htmlAudioGreat, name: 'great' }
+        ];
+
+        let loadedCount = 0;
+        const totalCount = audioFiles.filter(a => a.element).length;
+
+        audioFiles.forEach(({ element, name }) => {
+          if (!element) return;
+
+          // 设置预加载属性
+          element.preload = 'auto';
+          
+          // 强制加载音频
+          try {
+            // 方法1: 调用 load() 方法强制浏览器下载
+            element.load();
+            
+            // 方法2: 尝试播放一小段然后立即暂停，强制浏览器缓存
+            // 注意：现代浏览器可能阻止自动播放，所以使用 canplaythrough 事件
+            const handleCanPlay = () => {
+              loadedCount++;
+              // 移除事件监听器
+              element.removeEventListener('canplaythrough', handleCanPlay);
+              element.removeEventListener('error', handleError);
+              
+              if (loadedCount >= totalCount) {
+                audioPreloaded = true;
+                console.log('所有音频文件已预加载完成');
+              }
+            };
+            
+            const handleError = (e) => {
+              console.warn(`音频文件 ${name} 加载失败:`, e);
+              loadedCount++;
+              element.removeEventListener('canplaythrough', handleCanPlay);
+              element.removeEventListener('error', handleError);
+              
+              if (loadedCount >= totalCount) {
+                audioPreloaded = true;
+              }
+            };
+
+            // 监听加载完成事件
+            element.addEventListener('canplaythrough', handleCanPlay, { once: true });
+            element.addEventListener('error', handleError, { once: true });
+            
+            // 如果已经可以播放，直接触发
+            if (element.readyState >= 3) { // HAVE_FUTURE_DATA 或更高
+              handleCanPlay();
+            }
+          } catch (e) {
+            console.warn(`预加载音频 ${name} 时出错:`, e);
+            loadedCount++;
+            if (loadedCount >= totalCount) {
+              audioPreloaded = true;
+            }
+          }
+        });
+
+        // 如果没有音频文件，直接标记为已加载
+        if (totalCount === 0) {
+          audioPreloaded = true;
         }
       }
 
@@ -824,18 +902,20 @@
         // 如果连续答对5题，播放 great.mp3
         if (success && useGreat) {
           try {
-            const greatAudio = new Audio("sounds/great.mp3");
-            greatAudio.volume = 1.0;
-            const playPromise = greatAudio.play();
-            if (playPromise && typeof playPromise.then === "function") {
-              playPromise.catch(() => {
-                // 如果播放失败，使用普通正确音效
-                playBeep(success, false);
-              });
+            if (htmlAudioGreat) {
+              htmlAudioGreat.currentTime = 0;
+              const playPromise = htmlAudioGreat.play();
+              if (playPromise && typeof playPromise.then === "function") {
+                playPromise.catch(() => {
+                  // 如果播放失败，使用普通正确音效
+                  playBeep(success, false);
+                });
+              }
+              return;
             }
-            return;
           } catch (e) {
             // 如果创建失败，使用普通正确音效
+            playBeep(success, false);
           }
         }
 
@@ -1032,12 +1112,15 @@
             shouldShowCelebration = true;
             consecutiveCorrect = 0; // 重置计数，避免重复触发
             playBeep(true, true); // 播放 great.mp3
-            showBadgeCelebration(() => {
-              // 徽章展示完成后的回调
-              if (!gameOver) {
+            if (!gameOver) {
                 renderQuestion();
-              }
-            });
+            }
+            // showBadgeCelebration(() => {
+            //   // 徽章展示完成后的回调
+            //   if (!gameOver) {
+            //     renderQuestion();
+            //   }
+            // });
           } else {
             playBeep(true, false); // 播放普通正确音效
           }
@@ -1379,7 +1462,7 @@
             if (resultBadgeLabelEl) {
               resultBadgeLabelEl.textContent = "很遗憾！本次未获得徽章，再接再厉！";
             }
-            resultBadgeImgEl.innerHTML = '<div style="font-size: 11px; color: #999; text-align: center; padding: 8px; line-height: 1.4;">需满足：<br/>每分钟>5题<br/>且正确率>80%</div>';
+            //resultBadgeImgEl.innerHTML = '<div style="font-size: 11px; color: #999; text-align: center; padding: 8px; line-height: 1.4;">需满足：<br/>每分钟>5题<br/>且正确率>80%</div>';
           }
         }
 
@@ -1539,6 +1622,28 @@
       // 初始化显示
       showScreen("start");
       renderHistory(); // 初始化时显示历史成绩
+      
+      // 页面加载完成后立即预加载音频
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', preloadAudio);
+      } else {
+        // DOM 已经加载完成，立即预加载
+        preloadAudio();
+      }
+      
+      // 额外保险：在用户首次交互时也尝试预加载（某些浏览器需要用户交互才能加载音频）
+      let userInteracted = false;
+      const handleUserInteraction = () => {
+        if (!userInteracted) {
+          userInteracted = true;
+          preloadAudio();
+          // 移除事件监听器
+          document.removeEventListener('click', handleUserInteraction);
+          document.removeEventListener('touchstart', handleUserInteraction);
+        }
+      };
+      document.addEventListener('click', handleUserInteraction, { once: true });
+      document.addEventListener('touchstart', handleUserInteraction, { once: true });
     })();
   </script>
   <!--
@@ -1550,6 +1655,7 @@
   -->
   <audio id="sound-correct" src="sounds/correct.mp3" preload="auto"></audio>
   <audio id="sound-wrong" src="sounds/wrong.mp3" preload="auto"></audio>
+  <audio id="sound-great" src="sounds/great.mp3" preload="auto"></audio>
 </body>
 </html>
 
